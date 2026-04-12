@@ -2,11 +2,15 @@
 //  PRECIOUS METALS TERMINAL — Configuration
 // ─────────────────────────────────────────────
 const CONFIG = {
-  // GoldAPI.io — replace with your actual key
-  GOLDAPI_KEY: 'YOUR_GOLDAPI_KEY',
+  // ── Primary: GoldAPI.io ──────────────────────
+  GOLDAPI_KEY:  'goldapi-2azikssmnw8rg1x-io',
   GOLDAPI_BASE: 'https://www.goldapi.io/api',
 
-  // Frankfurter (free, no key needed)
+  // ── Secondary: Metals.dev ────────────────────
+  METALSDEV_KEY:  '9TVJOTMXOISXAJMXR25B315MXR25B',
+  METALSDEV_BASE: 'https://api.metals.dev/v1/metal/spot',
+
+  // ── Frankfurter (free, no key needed) ────────
   FRANKFURTER_BASE: 'https://api.frankfurter.app',
 
   // Lebanese Pound parallel rate (update periodically)

@@ -1,49 +1,76 @@
 // ─────────────────────────────────────────────
 //  PRICES.JS — Live price fetching & management
+//  Source chain: GoldAPI → Metals.dev → hardcoded
 // ─────────────────────────────────────────────
 
 const PriceManager = (() => {
-  let priceData = {};
-  let eurRate = null;
-  let lastUpdated = null;
-  let updateTimer = null;
+  let priceData      = {};
+  let eurRate        = null;
+  let lastUpdated    = null;
+  let updateTimer    = null;
   let countdownTimer = null;
   let secondsUntilUpdate = 60;
 
-  // ── Fetch a single metal from GoldAPI ──────────────────────
-  async function fetchMetal(symbol) {
+  // Metals.dev uses lowercase names, not symbols
+  const METALSDEV_NAMES = { XAU: 'gold', XAG: 'silver', XPT: 'platinum' };
+
+  // ── SOURCE 1: GoldAPI.io ──────────────────────────────────
+  async function fetchGoldAPI(symbol) {
     const url = `${CONFIG.GOLDAPI_BASE}/${symbol}/USD`;
-    const response = await fetch(url, {
-      headers: { 'x-access-token': CONFIG.GOLDAPI_KEY }
+    const res = await fetch(url, {
+      headers: { 'x-access-token': CONFIG.GOLDAPI_KEY },
+      signal: AbortSignal.timeout(8000)
     });
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    const data = await response.json();
+    if (!res.ok) throw new Error(`GoldAPI HTTP ${res.status}`);
+    const d = await res.json();
+    if (!d.price) throw new Error('GoldAPI: no price field');
     return {
       symbol,
-      price:      data.price,
-      prev_close: data.prev_close_price,
-      open:       data.open_price,
-      high:       data.high_price,
-      low:        data.low_price,
-      change:     data.ch,
-      change_pct: data.chp,
-      timestamp:  data.timestamp,
-      ask:        data.ask  || data.price * 1.0003,
-      bid:        data.bid  || data.price * 0.9997,
+      price:      d.price,
+      prev_close: d.prev_close_price || d.price,
+      open:       d.open_price       || d.price,
+      high:       d.high_price       || d.price,
+      low:        d.low_price        || d.price,
+      change:     d.ch               || 0,
+      change_pct: d.chp              || 0,
+      timestamp:  d.timestamp        || Date.now() / 1000,
+      ask:        d.ask              || d.price * 1.0003,
+      bid:        d.bid              || d.price * 0.9997,
+      source:     'GoldAPI'
     };
   }
 
-  // ── Fetch EUR rate from Frankfurter ───────────────────────
-  async function fetchEurRate() {
-    const url = `${CONFIG.FRANKFURTER_BASE}/latest?from=USD&to=EUR`;
-    const res = await fetch(url);
-    const data = await res.json();
-    return data.rates.EUR;
+  // ── SOURCE 2: Metals.dev ──────────────────────────────────
+  async function fetchMetalsDev(symbol) {
+    const metal = METALSDEV_NAMES[symbol];
+    const url   = `${CONFIG.METALSDEV_BASE}?metal=${metal}&currency=USD&unit=toz&api_key=${CONFIG.METALSDEV_KEY}`;
+    const res   = await fetch(url, { signal: AbortSignal.timeout(8000) });
+    if (!res.ok) throw new Error(`Metals.dev HTTP ${res.status}`);
+    const d = await res.json();
+    // Metals.dev returns { status, metal, currency, unit, price, change, change_percentage }
+    if (d.status !== 'success' || !d.price) throw new Error(`Metals.dev: ${d.message || 'bad response'}`);
+    const price  = d.price;
+    const change = d.change             || 0;
+    const chp    = d.change_percentage  || 0;
+    return {
+      symbol,
+      price,
+      prev_close: price - change,
+      open:       price - change,
+      high:       price * 1.003,     // Metals.dev doesn't give day OHLC — estimate
+      low:        price * 0.997,
+      change,
+      change_pct: chp,
+      timestamp:  Date.now() / 1000,
+      ask:        price * 1.0003,
+      bid:        price * 0.9997,
+      source:     'Metals.dev'
+    };
   }
 
-  // ── Build price object from fallback ─────────────────────
+  // ── SOURCE 3: Hardcoded fallback ──────────────────────────
   function buildFallback(symbol) {
-    const fb = CONFIG.FALLBACK_PRICES[symbol];
+    const fb     = CONFIG.FALLBACK_PRICES[symbol];
     const change = fb.price - fb.prev_close;
     return {
       symbol,
@@ -57,84 +84,134 @@ const PriceManager = (() => {
       timestamp:  Date.now() / 1000,
       ask:        fb.price * 1.0003,
       bid:        fb.price * 0.9997,
-      isFallback: true
+      source:     'Offline'
     };
   }
 
-  // ── Fetch all metals ──────────────────────────────────────
-  async function fetchAllPrices() {
-    const results = {};
-    for (const symbol of CONFIG.METALS) {
-      try {
-        results[symbol] = await fetchMetal(symbol);
-      } catch (err) {
-        console.warn(`[PriceManager] API failed for ${symbol}, using fallback:`, err.message);
-        results[symbol] = buildFallback(symbol);
-      }
+  // ── Fetch one metal: try chain in order ───────────────────
+  async function fetchMetal(symbol) {
+    // 1. GoldAPI
+    try {
+      const data = await fetchGoldAPI(symbol);
+      console.info(`[PriceManager] ${symbol} via GoldAPI — $${data.price}`);
+      return data;
+    } catch (e) {
+      console.warn(`[PriceManager] GoldAPI failed for ${symbol}: ${e.message}`);
     }
-    return results;
+
+    // 2. Metals.dev
+    try {
+      const data = await fetchMetalsDev(symbol);
+      console.info(`[PriceManager] ${symbol} via Metals.dev — $${data.price}`);
+      return data;
+    } catch (e) {
+      console.warn(`[PriceManager] Metals.dev failed for ${symbol}: ${e.message}`);
+    }
+
+    // 3. Hardcoded
+    console.warn(`[PriceManager] ${symbol} using hardcoded fallback`);
+    return buildFallback(symbol);
+  }
+
+  // ── EUR rate from Frankfurter ─────────────────────────────
+  async function fetchEurRate() {
+    const res  = await fetch(`${CONFIG.FRANKFURTER_BASE}/latest?from=USD&to=EUR`,
+                              { signal: AbortSignal.timeout(6000) });
+    const data = await res.json();
+    return data.rates.EUR;
+  }
+
+  // ── Fetch all three metals (in parallel) ──────────────────
+  async function fetchAllPrices() {
+    const [xau, xag, xpt] = await Promise.all(
+      CONFIG.METALS.map(s => fetchMetal(s))
+    );
+    return { XAU: xau, XAG: xag, XPT: xpt };
+  }
+
+  // ── Update source badge in header ─────────────────────────
+  function updateSourceBadge(prices) {
+    const sources = [...new Set(Object.values(prices).map(p => p.source))];
+    const el = document.getElementById('data-source-badge');
+    if (!el) return;
+
+    if (sources.includes('Offline')) {
+      el.textContent = '⚠ Offline data';
+      el.style.color = '#f0a500';
+    } else if (sources.includes('Metals.dev') && !sources.includes('GoldAPI')) {
+      el.textContent = '● Metals.dev';
+      el.style.color = '#4da6ff';
+    } else if (sources.includes('GoldAPI')) {
+      el.textContent = '● GoldAPI Live';
+      el.style.color = 'var(--green)';
+    } else {
+      el.textContent = '● Live';
+      el.style.color = 'var(--green)';
+    }
+
+    // Also update fallback banner
+    const banner = document.getElementById('api-fallback-banner');
+    if (banner) banner.classList.toggle('show', sources.includes('Offline'));
   }
 
   // ── Main update cycle ─────────────────────────────────────
   async function update() {
+    const dot = document.getElementById('market-status-dot');
     try {
-      document.getElementById('market-status-dot')?.classList.add('fetching');
+      dot?.classList.add('fetching');
 
       const [prices, eur] = await Promise.all([
         fetchAllPrices(),
-        fetchEurRate().catch(() => 0.922)   // fallback EUR rate
+        fetchEurRate().catch(() => eurRate || 0.922)
       ]);
 
       const oldData = { ...priceData };
-      priceData = prices;
-      eurRate = eur;
+      priceData   = prices;
+      eurRate     = eur;
       lastUpdated = new Date();
 
-      // Dispatch custom event so all modules can react
+      updateSourceBadge(prices);
+
       document.dispatchEvent(new CustomEvent('pricesUpdated', {
         detail: { prices: priceData, eurRate, lastUpdated, oldData }
       }));
 
       secondsUntilUpdate = CONFIG.REFRESH_INTERVAL / 1000;
-      updateCountdownUI();
 
     } catch (err) {
-      console.error('[PriceManager] Update failed:', err);
+      console.error('[PriceManager] Update cycle error:', err);
     } finally {
-      document.getElementById('market-status-dot')?.classList.remove('fetching');
+      dot?.classList.remove('fetching');
     }
   }
 
-  // ── Countdown display ─────────────────────────────────────
+  // ── Countdown ─────────────────────────────────────────────
   function updateCountdownUI() {
     const el = document.getElementById('update-countdown');
     if (el) el.textContent = `${secondsUntilUpdate}s`;
-    secondsUntilUpdate--;
-    if (secondsUntilUpdate < 0) secondsUntilUpdate = CONFIG.REFRESH_INTERVAL / 1000;
+    if (secondsUntilUpdate > 0) secondsUntilUpdate--;
   }
 
-  // ── Market session status ─────────────────────────────────
+  // ── Market session ────────────────────────────────────────
   function getMarketStatus() {
-    const now = new Date();
+    const now     = new Date();
     const utcHour = now.getUTCHours();
-    const utcDay  = now.getUTCDay();   // 0=Sun, 6=Sat
+    const utcDay  = now.getUTCDay();
 
-    // Forex / spot gold: 22:00 Sun – 21:00 Fri UTC
-    if (utcDay === 6) return { open: false, session: 'Weekend', color: '#888' };
+    if (utcDay === 6) return { open: false, session: 'Weekend',  color: '#888' };
     if (utcDay === 0 && utcHour < 22) return { open: false, session: 'Pre-Open', color: '#f0a500' };
-    if (utcDay === 5 && utcHour >= 21) return { open: false, session: 'Closed', color: '#888' };
+    if (utcDay === 5 && utcHour >= 21) return { open: false, session: 'Closed',  color: '#888' };
 
-    // Sessions
-    if (utcHour >= 0 && utcHour < 8)   return { open: true, session: 'Asia', color: '#00ff88' };
-    if (utcHour >= 7 && utcHour < 16)  return { open: true, session: 'London', color: '#00ff88' };
-    if (utcHour >= 13 && utcHour < 21) return { open: true, session: 'New York', color: '#00ff88' };
-    return { open: true, session: 'Spot', color: '#00ff88' };
+    if (utcHour >= 22 || utcHour < 7)  return { open: true, session: 'Asia Session',     color: '#00ff88' };
+    if (utcHour >= 7  && utcHour < 13) return { open: true, session: 'London Session',   color: '#00ff88' };
+    if (utcHour >= 13 && utcHour < 21) return { open: true, session: 'New York Session', color: '#00ff88' };
+    return { open: true, session: 'Spot Market', color: '#00ff88' };
   }
 
-  // ── Public API ────────────────────────────────────────────
+  // ── Public ────────────────────────────────────────────────
   function start() {
     update();
-    updateTimer = setInterval(update, CONFIG.REFRESH_INTERVAL);
+    updateTimer    = setInterval(update, CONFIG.REFRESH_INTERVAL);
     countdownTimer = setInterval(updateCountdownUI, 1000);
   }
 
@@ -148,11 +225,9 @@ const PriceManager = (() => {
   function getEurRate()      { return eurRate || 0.922; }
   function getLastUpdated()  { return lastUpdated; }
   function getStatus()       { return getMarketStatus(); }
-
-  // Helpers
-  function toEur(usd)  { return usd * (eurRate || 0.922); }
-  function toLbp(usd)  { return usd * CONFIG.LBP_RATE; }
-  function toGram(usd) { return usd / CONFIG.TROY_OZ_TO_GRAM; }
+  function toEur(usd)        { return usd * (eurRate || 0.922); }
+  function toLbp(usd)        { return usd * CONFIG.LBP_RATE; }
+  function toGram(usd)       { return usd / CONFIG.TROY_OZ_TO_GRAM; }
 
   function format(value, decimals = 2) {
     return new Intl.NumberFormat('en-US', {

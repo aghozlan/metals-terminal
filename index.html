@@ -62,8 +62,9 @@
       <span id="market-session" style="color:var(--text-muted);font-size:10px;"></span>
     </div>
     <div class="header-identity">Ahmad Ghozlan · Data Scientist · Lebanon 🇱🇧</div>
+    <span id="data-source-badge" style="font-size:10px;font-family:'JetBrains Mono',monospace;letter-spacing:.05em;color:var(--text-muted);">● Connecting...</span>
     <div class="header-countdown">
-      <span style="color:var(--text-muted)">refresh </span>
+      <span style="color:var(--text-muted)">↻ </span>
       <span id="update-countdown" class="mono">60s</span>
     </div>
   </div>
@@ -74,16 +75,9 @@
 ═══════════════════════════════════════════════════════════ -->
 <main id="app">
 
-  <!-- API key notice -->
-  <div class="setup-guide" id="setup-guide">
-    <strong>Setup:</strong> Edit <code>data/config.js</code> and replace <code>YOUR_GOLDAPI_KEY</code> with your key from
-    <strong>goldapi.io</strong> (free tier available). Prices currently show hardcoded data from
-    historical.json — live prices activate once the key is set.
-    <span id="fallback-notice"></span>
-  </div>
-
+  <!-- Fallback banner — only shown if both APIs fail -->
   <div class="api-fallback-banner" id="api-fallback-banner">
-    ⚠ Live API unavailable — displaying last-known / historical prices
+    ⚠ Live APIs unavailable — displaying last-known prices. Check network connection.
   </div>
 
   <!-- ── 1. PRICE CARDS ──────────────────────────────────── -->
@@ -1001,17 +995,8 @@ document.addEventListener('pricesUpdated', e => {
   Alerts.check(e.detail.prices);
 });
 
-// ── Hide setup guide if API key is set ─────────────────────
-function checkSetupGuide() {
-  if (CONFIG.GOLDAPI_KEY !== 'YOUR_GOLDAPI_KEY') {
-    const sg = document.getElementById('setup-guide');
-    if (sg) sg.style.display = 'none';
-  }
-}
-
 // ── Boot sequence ─────────────────────────────────────────
 (async function boot() {
-  checkSetupGuide();
   updateMarketStatus();
   Alerts.load();
 
