@@ -1,0 +1,1036 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Precious Metals Terminal — Ahmad Ghozlan</title>
+  <meta name="description" content="Bloomberg-style precious metals trading terminal. Live gold, silver & platinum prices with technical analysis, statistics and AI forecast.">
+  <meta name="author" content="Ahmad Ghozlan">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🥇</text></svg>">
+
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+  <!-- Chart.js financial plugin (candlestick) -->
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-chart-financial@0.2.1/dist/chartjs-chart-financial.min.js"></script>
+  <!-- Chart.js annotation plugin -->
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3.0.1/dist/chartjs-plugin-annotation.min.js"></script>
+  <!-- Chart.js zoom plugin -->
+  <script src="https://cdn.jsdelivr.net/npm/hammerjs@2.0.8/hammer.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
+  <!-- Adapter for time axis -->
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+
+  <link rel="stylesheet" href="css/terminal.css">
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════════════════════
+     HEADER BAR
+═══════════════════════════════════════════════════════════ -->
+<header id="header">
+  <div class="header-brand">
+    <div class="header-logo">PM</div>
+    <div class="header-title">Precious Metals Terminal</div>
+  </div>
+
+  <div id="ticker-strip">
+    <div class="ticker-item" id="ticker-XAU">
+      <span class="ticker-metal">🥇 XAU/USD</span>
+      <span class="ticker-price mono" id="th-XAU-price">—</span>
+      <span class="ticker-change mono" id="th-XAU-change">—</span>
+    </div>
+    <div class="ticker-item" id="ticker-XAG">
+      <span class="ticker-metal">🥈 XAG/USD</span>
+      <span class="ticker-price mono" id="th-XAG-price">—</span>
+      <span class="ticker-change mono" id="th-XAG-change">—</span>
+    </div>
+    <div class="ticker-item" id="ticker-XPT">
+      <span class="ticker-metal">🥉 XPT/USD</span>
+      <span class="ticker-price mono" id="th-XPT-price">—</span>
+      <span class="ticker-change mono" id="th-XPT-change">—</span>
+    </div>
+  </div>
+
+  <div class="header-right">
+    <div class="market-status">
+      <div id="market-status-dot"></div>
+      <span id="market-status-label">LOADING</span>
+      <span id="market-session" style="color:var(--text-muted);font-size:10px;"></span>
+    </div>
+    <div class="header-identity">Ahmad Ghozlan · Data Scientist · Lebanon 🇱🇧</div>
+    <div class="header-countdown">
+      <span style="color:var(--text-muted)">refresh </span>
+      <span id="update-countdown" class="mono">60s</span>
+    </div>
+  </div>
+</header>
+
+<!-- ═══════════════════════════════════════════════════════════
+     APP BODY
+═══════════════════════════════════════════════════════════ -->
+<main id="app">
+
+  <!-- API key notice -->
+  <div class="setup-guide" id="setup-guide">
+    <strong>Setup:</strong> Edit <code>data/config.js</code> and replace <code>YOUR_GOLDAPI_KEY</code> with your key from
+    <strong>goldapi.io</strong> (free tier available). Prices currently show hardcoded data from
+    historical.json — live prices activate once the key is set.
+    <span id="fallback-notice"></span>
+  </div>
+
+  <div class="api-fallback-banner" id="api-fallback-banner">
+    ⚠ Live API unavailable — displaying last-known / historical prices
+  </div>
+
+  <!-- ── 1. PRICE CARDS ──────────────────────────────────── -->
+  <div class="section-heading">Live Spot Prices</div>
+  <div id="price-cards">
+    <!-- Gold -->
+    <div class="price-card" id="card-XAU">
+      <div class="card-header">
+        <div class="card-metal-name">🥇 Gold <span class="card-symbol">XAU</span></div>
+        <div class="card-symbol" id="card-XAU-status" style="color:var(--green)">●</div>
+      </div>
+      <div class="card-price mono" id="card-XAU-price">—</div>
+      <div class="bid-ask">
+        <span class="bid mono" id="card-XAU-bid">—</span>
+        <span class="ask mono" id="card-XAU-ask">—</span>
+      </div>
+      <div class="card-change up" id="card-XAU-change">—</div>
+      <canvas class="sparkline-canvas" id="spark-XAU"></canvas>
+      <div class="range-bar-container">
+        <div class="range-bar-labels">
+          <span id="xau-low-lbl">Low</span>
+          <span style="color:var(--text-muted);font-size:9px;">52-WEEK RANGE</span>
+          <span id="xau-high-lbl">High</span>
+        </div>
+        <div class="range-bar-track">
+          <div class="range-bar-fill" id="xau-range-fill" style="left:0;width:100%"></div>
+          <div class="range-bar-cursor" id="xau-range-cursor" style="left:80%"></div>
+        </div>
+      </div>
+      <div class="card-divider"></div>
+      <div class="card-metrics">
+        <div class="metric-row">
+          <span class="metric-label">Day Open</span>
+          <span class="metric-value mono" id="card-XAU-open">—</span>
+        </div>
+        <div class="metric-row">
+          <span class="metric-label">Day High</span>
+          <span class="metric-value mono" id="card-XAU-high">—</span>
+        </div>
+        <div class="metric-row">
+          <span class="metric-label">Per Gram</span>
+          <span class="metric-value mono" id="card-XAU-gram">—</span>
+        </div>
+        <div class="metric-row">
+          <span class="metric-label">Day Low</span>
+          <span class="metric-value mono" id="card-XAU-low">—</span>
+        </div>
+      </div>
+      <div class="currency-equiv">
+        <div class="equiv-item">
+          <div class="equiv-flag">🇪🇺</div>
+          <div class="equiv-label">EUR</div>
+          <div class="equiv-value mono" id="card-XAU-eur">—</div>
+        </div>
+        <div class="equiv-item">
+          <div class="equiv-flag">🇱🇧</div>
+          <div class="equiv-label">LBP</div>
+          <div class="equiv-value mono" id="card-XAU-lbp">—</div>
+        </div>
+        <div class="equiv-item">
+          <div class="equiv-flag">⚖️</div>
+          <div class="equiv-label">/gram</div>
+          <div class="equiv-value mono" id="card-XAU-gram2">—</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Silver -->
+    <div class="price-card" id="card-XAG">
+      <div class="card-header">
+        <div class="card-metal-name">🥈 Silver <span class="card-symbol">XAG</span></div>
+        <div class="card-symbol" id="card-XAG-status" style="color:var(--green)">●</div>
+      </div>
+      <div class="card-price mono" id="card-XAG-price">—</div>
+      <div class="bid-ask">
+        <span class="bid mono" id="card-XAG-bid">—</span>
+        <span class="ask mono" id="card-XAG-ask">—</span>
+      </div>
+      <div class="card-change up" id="card-XAG-change">—</div>
+      <canvas class="sparkline-canvas" id="spark-XAG"></canvas>
+      <div class="range-bar-container">
+        <div class="range-bar-labels">
+          <span id="xag-low-lbl">Low</span>
+          <span style="color:var(--text-muted);font-size:9px;">52-WEEK RANGE</span>
+          <span id="xag-high-lbl">High</span>
+        </div>
+        <div class="range-bar-track">
+          <div class="range-bar-fill" id="xag-range-fill" style="left:0;width:100%"></div>
+          <div class="range-bar-cursor" id="xag-range-cursor" style="left:80%"></div>
+        </div>
+      </div>
+      <div class="card-divider"></div>
+      <div class="card-metrics">
+        <div class="metric-row">
+          <span class="metric-label">Day Open</span>
+          <span class="metric-value mono" id="card-XAG-open">—</span>
+        </div>
+        <div class="metric-row">
+          <span class="metric-label">Day High</span>
+          <span class="metric-value mono" id="card-XAG-high">—</span>
+        </div>
+        <div class="metric-row">
+          <span class="metric-label">Per Gram</span>
+          <span class="metric-value mono" id="card-XAG-gram">—</span>
+        </div>
+        <div class="metric-row">
+          <span class="metric-label">Day Low</span>
+          <span class="metric-value mono" id="card-XAG-low">—</span>
+        </div>
+      </div>
+      <div class="currency-equiv">
+        <div class="equiv-item">
+          <div class="equiv-flag">🇪🇺</div>
+          <div class="equiv-label">EUR</div>
+          <div class="equiv-value mono" id="card-XAG-eur">—</div>
+        </div>
+        <div class="equiv-item">
+          <div class="equiv-flag">🇱🇧</div>
+          <div class="equiv-label">LBP</div>
+          <div class="equiv-value mono" id="card-XAG-lbp">—</div>
+        </div>
+        <div class="equiv-item">
+          <div class="equiv-flag">⚖️</div>
+          <div class="equiv-label">/gram</div>
+          <div class="equiv-value mono" id="card-XAG-gram2">—</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Platinum -->
+    <div class="price-card" id="card-XPT">
+      <div class="card-header">
+        <div class="card-metal-name">🥉 Platinum <span class="card-symbol">XPT</span></div>
+        <div class="card-symbol" id="card-XPT-status" style="color:var(--green)">●</div>
+      </div>
+      <div class="card-price mono" id="card-XPT-price">—</div>
+      <div class="bid-ask">
+        <span class="bid mono" id="card-XPT-bid">—</span>
+        <span class="ask mono" id="card-XPT-ask">—</span>
+      </div>
+      <div class="card-change up" id="card-XPT-change">—</div>
+      <canvas class="sparkline-canvas" id="spark-XPT"></canvas>
+      <div class="range-bar-container">
+        <div class="range-bar-labels">
+          <span id="xpt-low-lbl">Low</span>
+          <span style="color:var(--text-muted);font-size:9px;">52-WEEK RANGE</span>
+          <span id="xpt-high-lbl">High</span>
+        </div>
+        <div class="range-bar-track">
+          <div class="range-bar-fill" id="xpt-range-fill" style="left:0;width:100%"></div>
+          <div class="range-bar-cursor" id="xpt-range-cursor" style="left:80%"></div>
+        </div>
+      </div>
+      <div class="card-divider"></div>
+      <div class="card-metrics">
+        <div class="metric-row">
+          <span class="metric-label">Day Open</span>
+          <span class="metric-value mono" id="card-XPT-open">—</span>
+        </div>
+        <div class="metric-row">
+          <span class="metric-label">Day High</span>
+          <span class="metric-value mono" id="card-XPT-high">—</span>
+        </div>
+        <div class="metric-row">
+          <span class="metric-label">Per Gram</span>
+          <span class="metric-value mono" id="card-XPT-gram">—</span>
+        </div>
+        <div class="metric-row">
+          <span class="metric-label">Day Low</span>
+          <span class="metric-value mono" id="card-XPT-low">—</span>
+        </div>
+      </div>
+      <div class="currency-equiv">
+        <div class="equiv-item">
+          <div class="equiv-flag">🇪🇺</div>
+          <div class="equiv-label">EUR</div>
+          <div class="equiv-value mono" id="card-XPT-eur">—</div>
+        </div>
+        <div class="equiv-item">
+          <div class="equiv-flag">🇱🇧</div>
+          <div class="equiv-label">LBP</div>
+          <div class="equiv-value mono" id="card-XPT-lbp">—</div>
+        </div>
+        <div class="equiv-item">
+          <div class="equiv-flag">⚖️</div>
+          <div class="equiv-label">/gram</div>
+          <div class="equiv-value mono" id="card-XPT-gram2">—</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── 2. GS RATIO + CONVERTER ───────────────────────── -->
+  <div class="section-heading">Market Ratios &amp; Currency Converter</div>
+  <div class="row-2">
+
+    <!-- GS Ratio -->
+    <div class="panel">
+      <div class="panel-title">Gold / Silver Ratio</div>
+      <div id="gs-ratio-card">
+        <div class="gs-main">
+          <div class="gs-label">Current Ratio</div>
+          <div id="gs-ratio-value" class="mono">—</div>
+          <div class="gs-history mono">Avg: 70 &nbsp;|&nbsp; Low: 32 &nbsp;|&nbsp; High: 93</div>
+          <div id="gs-badge" class="gs-badge neutral">Calculating...</div>
+        </div>
+        <div>
+          <div class="gs-label" style="margin-bottom:6px;">Percentile (30–93 range)</div>
+          <div class="gs-gauge-track">
+            <div id="gs-gauge-fill" style="width:50%"></div>
+          </div>
+          <div style="display:flex;justify-content:space-between;font-size:9px;color:var(--text-muted);margin-top:3px;">
+            <span>30 (Silver Premium)</span>
+            <span>93 (Silver Cheap)</span>
+          </div>
+          <div class="gs-context" style="margin-top:12px;">
+            When ratio &gt; 80: Silver historically undervalued vs Gold.<br>
+            Current ratio reflects relative safe-haven demand.
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Currency Converter -->
+    <div class="panel" id="converter-panel">
+      <div class="panel-title">Currency Converter</div>
+      <div class="conv-inputs">
+        <input type="number" class="conv-input mono" id="conv-amount" value="1000" min="0" step="any" placeholder="Amount">
+        <select class="conv-select" id="conv-metal">
+          <option value="XAU">🥇 Gold</option>
+          <option value="XAG">🥈 Silver</option>
+          <option value="XPT">🥉 Platinum</option>
+        </select>
+        <select class="conv-select" id="conv-mode">
+          <option value="usd">USD →</option>
+          <option value="oz">Troy oz →</option>
+          <option value="gram">Grams →</option>
+        </select>
+      </div>
+      <div class="conv-outputs">
+        <div class="conv-out">
+          <div class="conv-out-label">🇺🇸 USD</div>
+          <div class="conv-out-value mono" id="conv-out-usd">—</div>
+        </div>
+        <div class="conv-out">
+          <div class="conv-out-label">🇪🇺 EUR</div>
+          <div class="conv-out-value mono" id="conv-out-eur">—</div>
+        </div>
+        <div class="conv-out">
+          <div class="conv-out-label">🇱🇧 LBP</div>
+          <div class="conv-out-value mono" id="conv-out-lbp">—</div>
+        </div>
+        <div class="conv-out">
+          <div class="conv-out-label">Troy oz</div>
+          <div class="conv-out-value mono" id="conv-out-oz">—</div>
+        </div>
+        <div class="conv-out">
+          <div class="conv-out-label">Grams</div>
+          <div class="conv-out-value mono" id="conv-out-gram">—</div>
+        </div>
+      </div>
+      <div id="gram-question">Enter an amount in USD to see purchasing power in gold grams</div>
+    </div>
+  </div>
+
+  <!-- ── 3. MAIN PRICE CHART ────────────────────────────── -->
+  <div class="section-heading">Interactive Price Chart</div>
+  <div class="panel">
+    <div class="chart-toolbar">
+      <div class="chart-toolbar-left">
+        <span style="font-size:10px;color:var(--text-muted);letter-spacing:.08em;">METAL</span>
+        <div class="btn-group" id="metal-btns">
+          <button class="btn active" onclick="UI.setMetal('XAU',this)">Gold</button>
+          <button class="btn" onclick="UI.setMetal('XAG',this)">Silver</button>
+          <button class="btn" onclick="UI.setMetal('XPT',this)">Platinum</button>
+        </div>
+        <span style="font-size:10px;color:var(--text-muted);letter-spacing:.08em;margin-left:8px;">RANGE</span>
+        <div class="btn-group" id="range-btns">
+          <button class="btn" onclick="UI.setRange('1W',this)">1W</button>
+          <button class="btn" onclick="UI.setRange('1M',this)">1M</button>
+          <button class="btn" onclick="UI.setRange('3M',this)">3M</button>
+          <button class="btn active" onclick="UI.setRange('1Y',this)">1Y</button>
+          <button class="btn" onclick="UI.setRange('5Y',this)">All</button>
+        </div>
+      </div>
+      <div class="chart-toolbar-right">
+        <span style="font-size:10px;color:var(--text-muted);">OVERLAYS</span>
+        <button class="btn overlay-btn active" id="ov-sma7"  onclick="UI.toggleOverlay('sma7',this)">SMA 7</button>
+        <button class="btn overlay-btn active" id="ov-sma30" onclick="UI.toggleOverlay('sma30',this)">SMA 30</button>
+        <button class="btn overlay-btn" id="ov-sma200" onclick="UI.toggleOverlay('sma200',this)">SMA 200</button>
+        <button class="btn overlay-btn active" id="ov-bb"    onclick="UI.toggleOverlay('bb',this)">BB</button>
+        <button class="btn overlay-btn active" id="ov-volume" onclick="UI.toggleOverlay('volume',this)">Vol</button>
+      </div>
+    </div>
+    <div class="chart-container">
+      <canvas id="main-chart"></canvas>
+    </div>
+  </div>
+
+  <!-- ── 4. TECHNICAL INDICATORS ───────────────────────── -->
+  <div class="section-heading">Technical Indicators</div>
+  <div id="indicators-row">
+
+    <!-- RSI -->
+    <div class="panel">
+      <div class="indicator-header">
+        <div class="indicator-title">RSI (14)</div>
+        <div>
+          <span id="rsi-current" class="rsi-current neutral">—</span>
+        </div>
+        <div id="rsi-badge" class="rsi-badge neutral">—</div>
+      </div>
+      <div class="chart-container-sm">
+        <canvas id="rsi-chart"></canvas>
+      </div>
+      <div style="display:flex;justify-content:space-between;font-size:9px;color:var(--text-muted);margin-top:4px;">
+        <span style="color:var(--red)">Overbought &gt;70</span>
+        <span>Neutral 30–70</span>
+        <span style="color:var(--green)">Oversold &lt;30</span>
+      </div>
+    </div>
+
+    <!-- MACD -->
+    <div class="panel">
+      <div class="indicator-header">
+        <div class="indicator-title">MACD (12,26,9)</div>
+        <div id="macd-badge" class="macd-badge bullish">—</div>
+      </div>
+      <div class="chart-container-sm">
+        <canvas id="macd-chart"></canvas>
+      </div>
+      <div style="display:flex;gap:16px;font-size:9px;color:var(--text-muted);margin-top:4px;">
+        <span style="color:#4da6ff">■ MACD</span>
+        <span style="color:#f0a500">■ Signal</span>
+        <span style="color:var(--green)">■ Hist +</span>
+        <span style="color:var(--red)">■ Hist -</span>
+      </div>
+    </div>
+
+    <!-- Bollinger Bands %B -->
+    <div class="panel">
+      <div class="indicator-header">
+        <div class="indicator-title">Bollinger Bands %B</div>
+        <div id="bb-squeeze" class="bb-squeeze-badge">—</div>
+      </div>
+      <div class="chart-container-sm">
+        <canvas id="bb-chart"></canvas>
+      </div>
+      <div style="display:flex;justify-content:space-between;font-size:9px;color:var(--text-muted);margin-top:4px;">
+        <span>BW: <span id="bb-bandwidth" class="mono text-gold">—</span></span>
+        <span style="color:var(--red)">Above Upper: &gt;100%</span>
+        <span style="color:var(--green)">Below Lower: &lt;0%</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── 5. STATISTICAL ANALYSIS ───────────────────────── -->
+  <div class="section-heading">Quantitative Analysis</div>
+  <div id="stats-row">
+
+    <!-- Left col -->
+    <div style="display:flex;flex-direction:column;gap:12px;">
+
+      <!-- Volatility -->
+      <div class="panel panel-gold">
+        <div class="panel-title">Volatility Metrics — XAU</div>
+        <div id="vol-metrics">
+          <div style="color:var(--text-muted);font-size:11px;">Loading...</div>
+        </div>
+      </div>
+
+      <!-- Correlation matrix -->
+      <div class="panel panel-gold">
+        <div class="panel-title">Correlation Matrix</div>
+        <div id="correlation-matrix">
+          <div style="color:var(--text-muted);font-size:11px;">Loading...</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right col -->
+    <div style="display:flex;flex-direction:column;gap:12px;">
+
+      <!-- Regression -->
+      <div class="panel panel-gold">
+        <div class="panel-title">Regression Analysis</div>
+        <div id="regression-panel">
+          <div style="color:var(--text-muted);font-size:11px;">Loading...</div>
+        </div>
+      </div>
+
+      <!-- Returns distribution -->
+      <div class="panel panel-gold">
+        <div class="panel-title">Returns Distribution — XAU (Weekly)</div>
+        <div id="returns-dist-stats"></div>
+        <canvas id="returns-histogram" width="500" height="160" style="width:100%;max-height:160px;"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── 6. AI FORECAST ─────────────────────────────────── -->
+  <div class="section-heading">Quantitative Forecast</div>
+  <div class="panel panel-gold">
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:14px;">
+      <div>
+        <div class="panel-title" style="margin-bottom:2px;">AI Price Prediction — Gold (7-Day)</div>
+        <div style="font-size:10px;color:var(--text-muted);">
+          Trend extrapolation · Confidence interval · Based on last 30 data points
+        </div>
+      </div>
+      <div style="display:flex;gap:12px;font-size:9px;color:var(--text-muted);">
+        <span style="color:var(--gold)">─── Historical</span>
+        <span style="color:#fff;opacity:.7">- - - Forecast</span>
+        <span style="color:rgba(212,175,55,0.4)">░ 95% CI</span>
+      </div>
+    </div>
+    <div style="height:200px;margin-bottom:14px;">
+      <canvas id="forecast-chart"></canvas>
+    </div>
+    <div id="forecast-table">
+      <div style="color:var(--text-muted);font-size:11px;">Generating forecast...</div>
+    </div>
+    <div class="forecast-disclaimer">
+      ⚠ Forecast based on trend extrapolation only. Not financial advice.
+      For educational and research purposes only. Past performance does not predict future results.
+    </div>
+  </div>
+
+  <!-- ── 7. MARKET CONTEXT ──────────────────────────────── -->
+  <div class="section-heading">Market Context &amp; Geopolitical Events</div>
+  <div class="row-2">
+
+    <!-- Crisis timeline -->
+    <div class="panel">
+      <div class="panel-title">Safe-Haven Demand — Historical Crises</div>
+      <ul class="crisis-timeline">
+        <li class="crisis-item">
+          <span class="crisis-year">2008</span>
+          <span class="crisis-desc">Global Financial Crisis — Lehman collapse, banking system freeze</span>
+          <span class="crisis-gain">+25%</span>
+        </li>
+        <li class="crisis-item">
+          <span class="crisis-year">2011</span>
+          <span class="crisis-desc">US debt downgrade, Eurozone crisis — gold peaks at $1,920</span>
+          <span class="crisis-gain">+30%</span>
+        </li>
+        <li class="crisis-item">
+          <span class="crisis-year">2020</span>
+          <span class="crisis-desc">COVID-19 pandemic — Fed unlimited QE, gold hits $2,070</span>
+          <span class="crisis-gain">+27%</span>
+        </li>
+        <li class="crisis-item">
+          <span class="crisis-year">2022</span>
+          <span class="crisis-desc">Russia-Ukraine war — energy shock, sanctions, supply disruption</span>
+          <span class="crisis-gain">+13%</span>
+        </li>
+        <li class="crisis-item">
+          <span class="crisis-year">2026</span>
+          <span class="crisis-desc">Hormuz Strait closure (Feb 28) → war risk premiums → ATH series</span>
+          <span class="crisis-gain" style="color:#D4AF37">+140%↑</span>
+        </li>
+      </ul>
+    </div>
+
+    <!-- DXY/Oil correlation note -->
+    <div class="panel">
+      <div class="panel-title">Gold Macro Correlations</div>
+      <div style="display:flex;flex-direction:column;gap:10px;margin-top:4px;">
+        <div style="padding:10px;background:rgba(255,68,68,0.06);border:1px solid rgba(255,68,68,0.2);border-radius:6px;">
+          <div style="font-size:10px;font-weight:700;color:var(--red);margin-bottom:4px;">↕ INVERSE — Gold vs USD (DXY)</div>
+          <div style="font-size:10px;color:var(--text-dim);">Strong inverse: when USD strengthens, gold weakens (and vice versa). Dollar-denominated asset dynamic.</div>
+        </div>
+        <div style="padding:10px;background:rgba(0,255,136,0.06);border:1px solid rgba(0,255,136,0.2);border-radius:6px;">
+          <div style="font-size:10px;font-weight:700;color:var(--green);margin-bottom:4px;">↑ POSITIVE — Gold vs Brent Crude</div>
+          <div style="font-size:10px;color:var(--text-dim);">Oil spikes raise inflation fears → investors buy gold as inflation hedge. Energy crises amplify both.</div>
+        </div>
+        <div style="padding:10px;background:rgba(212,175,55,0.06);border:1px solid var(--gold-border);border-radius:6px;">
+          <div style="font-size:10px;font-weight:700;color:var(--gold);margin-bottom:4px;">⚡ HORMUZ CRISIS — Feb 28, 2026</div>
+          <div style="font-size:10px;color:var(--text-dim);">Strait closure cut 20% of global oil supply, triggering war risk insurance premiums. Gold responded as the primary safe-haven, surpassing all historical ATH records.</div>
+        </div>
+        <div style="padding:10px;background:rgba(77,166,255,0.06);border:1px solid rgba(77,166,255,0.2);border-radius:6px;">
+          <div style="font-size:10px;font-weight:700;color:#4da6ff;margin-bottom:4px;">🏛 CENTRAL BANK BUYING</div>
+          <div style="font-size:10px;color:var(--text-dim);">Central banks (China, India, Russia) increased gold reserves throughout 2024-2026, reducing USD dependency and providing sustained upward price pressure.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── 8. PRICE ALERTS ────────────────────────────────── -->
+  <div class="section-heading">Price Alerts</div>
+  <div class="panel">
+    <div class="panel-title">Set Alert</div>
+    <div class="alert-form">
+      <select class="conv-select" id="alert-metal">
+        <option value="XAU">🥇 Gold</option>
+        <option value="XAG">🥈 Silver</option>
+        <option value="XPT">🥉 Platinum</option>
+      </select>
+      <select class="conv-select" id="alert-direction" style="min-width:80px">
+        <option value="above">above</option>
+        <option value="below">below</option>
+      </select>
+      <input type="number" class="conv-input mono" id="alert-price" placeholder="Price (USD)" style="font-size:13px;">
+      <button class="btn-gold" onclick="Alerts.add()">+ Add Alert</button>
+    </div>
+    <div id="alerts-list-container">
+      <ul class="alert-list" id="alerts-list"></ul>
+      <div id="no-alerts" style="font-size:11px;color:var(--text-muted);padding:8px 0;">
+        No active alerts. Add one above.
+        <span style="opacity:0.6">Browser notifications will fire when price is reached.</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── 9. ATH RECORDS ─────────────────────────────────── -->
+  <div class="section-heading">All-Time High Records</div>
+  <div class="panel">
+    <table class="ath-table">
+      <thead>
+        <tr>
+          <th>Metal</th>
+          <th>ATH Price</th>
+          <th>Date</th>
+          <th>Notes</th>
+          <th>Current vs ATH</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><span style="color:var(--gold);font-weight:700;">🥇 Gold</span></td>
+          <td class="text-gold" style="font-weight:700;">$6,773.00</td>
+          <td>Apr 2026</td>
+          <td style="color:var(--text-dim);font-size:10px;">Hormuz crisis + central bank buying</td>
+          <td><span class="ath-badge current" id="xau-ath-badge">Current ATH</span></td>
+        </tr>
+        <tr>
+          <td><span style="color:#C0C0C0;font-weight:700;">🥈 Silver</span></td>
+          <td>$49.80</td>
+          <td>Apr 2011</td>
+          <td style="color:var(--text-dim);font-size:10px;">Hunt Brothers legacy + QE2</td>
+          <td><span class="ath-badge below" id="xag-ath-badge">Loading...</span></td>
+        </tr>
+        <tr>
+          <td><span style="color:#E5E4E2;font-weight:700;">🥉 Platinum</span></td>
+          <td>$2,290.00</td>
+          <td>Mar 2008</td>
+          <td style="color:var(--text-dim);font-size:10px;">Pre-GFC industrial demand peak</td>
+          <td><span class="ath-badge below" id="xpt-ath-badge">Loading...</span></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+</main>
+
+<!-- ═══════════════════════════════════════════════════════════
+     FOOTER
+═══════════════════════════════════════════════════════════ -->
+<footer id="footer">
+  <div class="footer-row">
+    <strong style="color:var(--gold)">Ahmad Ghozlan</strong> &nbsp;·&nbsp;
+    Data Scientist · MSc Applied Statistics &nbsp;·&nbsp;
+    Lebanon 🇱🇧
+  </div>
+  <div class="footer-row" style="margin-top:6px;">
+    Data sources:
+    <a href="https://www.goldapi.io" target="_blank" rel="noopener">GoldAPI.io</a> (live spot prices) &nbsp;·&nbsp;
+    <a href="https://www.frankfurter.app" target="_blank" rel="noopener">Frankfurter API</a> (EUR/USD) &nbsp;·&nbsp;
+    LBP rate hardcoded at 89,500/USD
+  </div>
+  <div class="footer-row">
+    Charts: <a href="https://www.chartjs.org" target="_blank" rel="noopener">Chart.js</a> &nbsp;·&nbsp;
+    License: CC BY 4.0
+  </div>
+  <div class="footer-disclaimer">
+    Prices delayed max 60 seconds · Not financial advice · For educational and research purposes only
+  </div>
+</footer>
+
+<!-- ═══════════════════════════════════════════════════════════
+     SCRIPTS
+═══════════════════════════════════════════════════════════ -->
+<script src="data/config.js"></script>
+<script src="js/indicators.js"></script>
+<script src="js/prices.js"></script>
+<script src="js/statistics.js"></script>
+<script src="js/converter.js"></script>
+<script src="js/charts.js"></script>
+
+<script>
+// ──────────────────────────────────────────────────────────
+//  MAIN APP CONTROLLER
+// ──────────────────────────────────────────────────────────
+
+let HISTORICAL = null;
+let sparkCharts = {};
+
+// ── Load historical data ──────────────────────────────────
+async function loadHistorical() {
+  const res  = await fetch('data/historical.json');
+  HISTORICAL = await res.json();
+  Charts.initAll(HISTORICAL);
+  Statistics.refresh(
+    HISTORICAL,
+    CONFIG.FALLBACK_PRICES.XAU.price,
+    CONFIG.FALLBACK_PRICES.XAG.price
+  );
+}
+
+// ── Format helpers ────────────────────────────────────────
+function fmt(v, d = 2) {
+  return new Intl.NumberFormat('en-US', {
+    minimumFractionDigits: d,
+    maximumFractionDigits: d
+  }).format(v);
+}
+
+function fmtK(v) {
+  if (v >= 1e6) return fmt(v / 1e6, 2) + 'M';
+  if (v >= 1000) return fmt(v, 0);
+  return fmt(v, 2);
+}
+
+// ── Sparkline canvas draw ─────────────────────────────────
+function drawSparkline(symbol, prices) {
+  const canvas = document.getElementById(`spark-${symbol}`);
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  const W = canvas.offsetWidth || 280;
+  const H = canvas.offsetHeight || 40;
+  canvas.width  = W * window.devicePixelRatio;
+  canvas.height = H * window.devicePixelRatio;
+  ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
+  ctx.clearRect(0, 0, W, H);
+
+  if (!prices || prices.length < 2) return;
+  const min = Math.min(...prices);
+  const max = Math.max(...prices);
+  const range = max - min || 1;
+  const isUp  = prices[prices.length - 1] >= prices[0];
+
+  const gradient = ctx.createLinearGradient(0, 0, 0, H);
+  gradient.addColorStop(0, isUp ? 'rgba(0,255,136,0.3)' : 'rgba(255,68,68,0.3)');
+  gradient.addColorStop(1, 'transparent');
+
+  ctx.beginPath();
+  prices.forEach((p, i) => {
+    const x = (i / (prices.length - 1)) * W;
+    const y = H - ((p - min) / range) * (H - 4) - 2;
+    i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+  });
+  ctx.strokeStyle = isUp ? '#00ff88' : '#ff4444';
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+
+  // Fill area under line
+  ctx.lineTo(W, H);
+  ctx.lineTo(0, H);
+  ctx.closePath();
+  ctx.fillStyle = gradient;
+  ctx.fill();
+}
+
+// ── Update price cards ─────────────────────────────────────
+function updateCard(symbol, data, eurRate) {
+  if (!data) return;
+  const p  = data.price;
+  const d  = data.change || 0;
+  const dp = data.change_pct || 0;
+  const isUp = d >= 0;
+  const perGram = p / CONFIG.TROY_OZ_TO_GRAM;
+
+  // Price
+  const priceEl = document.getElementById(`card-${symbol}-price`);
+  if (priceEl) {
+    const oldPrice = parseFloat(priceEl.textContent.replace(/[^0-9.]/g, '')) || 0;
+    priceEl.textContent = '$' + fmt(p);
+    if (oldPrice && oldPrice !== p) {
+      priceEl.classList.remove('flash-up', 'flash-down');
+      void priceEl.offsetWidth;
+      priceEl.classList.add(p > oldPrice ? 'flash-up' : 'flash-down');
+    }
+  }
+
+  // Bid/Ask
+  const bidEl = document.getElementById(`card-${symbol}-bid`);
+  const askEl = document.getElementById(`card-${symbol}-ask`);
+  if (bidEl) bidEl.textContent = '$' + fmt(data.bid || p * 0.9997);
+  if (askEl) askEl.textContent = '$' + fmt(data.ask || p * 1.0003);
+
+  // Change
+  const changeEl = document.getElementById(`card-${symbol}-change`);
+  if (changeEl) {
+    const arrow = isUp ? '▲' : '▼';
+    changeEl.textContent = `${arrow} $${fmt(Math.abs(d))} (${isUp ? '+' : ''}${dp.toFixed(2)}%)`;
+    changeEl.className = `card-change ${isUp ? 'up' : 'down'}`;
+  }
+
+  // OHLC
+  ['open','high','low'].forEach(k => {
+    const el = document.getElementById(`card-${symbol}-${k}`);
+    if (el) el.textContent = '$' + fmt(data[k] || p);
+  });
+  const gramEl = document.getElementById(`card-${symbol}-gram`);
+  if (gramEl) gramEl.textContent = '$' + fmt(perGram);
+
+  // Currency
+  const eurEl = document.getElementById(`card-${symbol}-eur`);
+  if (eurEl) eurEl.textContent = '€' + fmt(p * eurRate);
+  const lbpEl = document.getElementById(`card-${symbol}-lbp`);
+  if (lbpEl) lbpEl.textContent = new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 }).format(p * CONFIG.LBP_RATE);
+  const gram2El = document.getElementById(`card-${symbol}-gram2`);
+  if (gram2El) gram2El.textContent = '$' + fmt(perGram, 2);
+
+  // 52-wk range
+  if (HISTORICAL) {
+    const allPrices = HISTORICAL[symbol]?.weekly?.map(d => d.close) || [];
+    const oneYearAgo = new Date(); oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
+    const yearData = HISTORICAL[symbol]?.weekly?.filter(d => new Date(d.date) >= oneYearAgo) || allPrices;
+    const closesSlice = (yearData.length > 0 ? yearData : HISTORICAL[symbol]?.weekly || []).map(d => d.close);
+    const lo52 = Math.min(...closesSlice);
+    const hi52 = Math.max(...closesSlice);
+    const sym  = symbol.toLowerCase().slice(1);
+    const lblLo = document.getElementById(`x${sym}-low-lbl`);
+    const lblHi = document.getElementById(`x${sym}-high-lbl`);
+    const fill  = document.getElementById(`x${sym}-range-fill`);
+    const cursor = document.getElementById(`x${sym}-range-cursor`);
+    if (lblLo) lblLo.textContent = '$' + fmtK(lo52);
+    if (lblHi) lblHi.textContent = '$' + fmtK(hi52);
+    if (fill && cursor) {
+      const pct = ((p - lo52) / (hi52 - lo52) * 100).toFixed(1);
+      fill.style.width = `${pct}%`;
+      cursor.style.left = `${pct}%`;
+    }
+  }
+
+  // ATH badge
+  const athBadge = document.getElementById(`${symbol.toLowerCase()}-ath-badge`);
+  if (athBadge) {
+    const aths = { XAU: 6773, XAG: 49.80, XPT: 2290 };
+    const ath = aths[symbol];
+    if (ath && p >= ath * 0.995) {
+      athBadge.textContent = 'Current ATH';
+      athBadge.className = 'ath-badge current';
+    } else if (ath) {
+      const pct = ((p - ath) / ath * 100).toFixed(1);
+      athBadge.textContent = `${pct}% from ATH`;
+      athBadge.className = 'ath-badge below';
+    }
+  }
+
+  // Sparkline
+  if (HISTORICAL) {
+    const allW = HISTORICAL[symbol]?.weekly || [];
+    const last28 = allW.slice(-28).map(d => d.close);
+    if (last28.length > 1) drawSparkline(symbol, last28);
+  }
+}
+
+// ── Header ticker update ──────────────────────────────────
+function updateTicker(symbol, data) {
+  if (!data) return;
+  const isUp  = (data.change || 0) >= 0;
+  const dp    = data.change_pct || 0;
+  const arrow = isUp ? '▲' : '▼';
+  const priceEl  = document.getElementById(`th-${symbol}-price`);
+  const changeEl = document.getElementById(`th-${symbol}-change`);
+  if (priceEl) priceEl.textContent = '$' + fmt(data.price);
+  if (changeEl) {
+    changeEl.textContent = `${arrow} ${isUp ? '+' : ''}${dp.toFixed(2)}%`;
+    changeEl.className   = `ticker-change mono ${isUp ? 'up' : 'down'}`;
+  }
+}
+
+// ── Market status ─────────────────────────────────────────
+function updateMarketStatus() {
+  const status = PriceManager.getStatus();
+  const dot   = document.getElementById('market-status-dot');
+  const label = document.getElementById('market-status-label');
+  const sess  = document.getElementById('market-session');
+  if (dot) dot.style.background = status.open ? '#00ff88' : '#888';
+  if (label) { label.textContent = status.open ? 'OPEN' : 'CLOSED'; label.style.color = status.color; }
+  if (sess) sess.textContent = `· ${status.session}`;
+}
+
+// ── Listen for price updates ───────────────────────────────
+document.addEventListener('pricesUpdated', e => {
+  const { prices, eurRate } = e.detail;
+  CONFIG.METALS.forEach(sym => {
+    updateCard(sym, prices[sym], eurRate);
+    updateTicker(sym, prices[sym]);
+  });
+
+  // GS ratio
+  if (prices.XAU && prices.XAG) {
+    Statistics.renderGSRatio(prices.XAU.price, prices.XAG.price);
+  }
+
+  // Show fallback banner if any metal used fallback
+  const anyFallback = CONFIG.METALS.some(s => prices[s]?.isFallback);
+  const banner = document.getElementById('api-fallback-banner');
+  if (banner) banner.classList.toggle('show', anyFallback);
+
+  // Update market status
+  updateMarketStatus();
+});
+
+// ── UI controller ──────────────────────────────────────────
+const UI = {
+  setMetal(symbol, btn) {
+    document.querySelectorAll('#metal-btns .btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    Charts.setMetal(symbol);
+  },
+
+  setRange(range, btn) {
+    document.querySelectorAll('#range-btns .btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    Charts.setRange(range);
+  },
+
+  toggleOverlay(key, btn) {
+    btn.classList.toggle('active');
+    Charts.toggleOverlay(key);
+  }
+};
+
+// ── Alerts module ──────────────────────────────────────────
+const Alerts = {
+  list: [],
+
+  load() {
+    try { this.list = JSON.parse(localStorage.getItem('pm-alerts') || '[]'); } catch { this.list = []; }
+    this.render();
+  },
+
+  save() {
+    localStorage.setItem('pm-alerts', JSON.stringify(this.list));
+  },
+
+  add() {
+    const metal  = document.getElementById('alert-metal')?.value;
+    const dir    = document.getElementById('alert-direction')?.value;
+    const price  = parseFloat(document.getElementById('alert-price')?.value);
+    if (!metal || !dir || isNaN(price) || price <= 0) return;
+
+    this.list.push({ id: Date.now(), metal, direction: dir, price, triggered: false });
+    this.save();
+    this.render();
+    if (document.getElementById('alert-price')) document.getElementById('alert-price').value = '';
+
+    // Request notification permission
+    if ('Notification' in window && Notification.permission === 'default') {
+      Notification.requestPermission();
+    }
+  },
+
+  remove(id) {
+    this.list = this.list.filter(a => a.id !== id);
+    this.save();
+    this.render();
+  },
+
+  check(prices) {
+    let triggered = false;
+    this.list.forEach(a => {
+      if (a.triggered) return;
+      const p = prices[a.metal]?.price;
+      if (!p) return;
+      const hit = a.direction === 'above' ? p >= a.price : p <= a.price;
+      if (hit) {
+        a.triggered = true;
+        triggered   = true;
+        this.notify(a, p);
+      }
+    });
+    if (triggered) { this.save(); this.render(); }
+  },
+
+  notify(alert, currentPrice) {
+    const name = CONFIG.METAL_NAMES[alert.metal];
+    const msg  = `${name} is now $${fmt(currentPrice)} — your alert: ${alert.direction} $${fmt(alert.price)}`;
+    if ('Notification' in window && Notification.permission === 'granted') {
+      new Notification(`🚨 Price Alert: ${name}`, { body: msg, icon: 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y=".9em" font-size="90">🥇</text></svg>' });
+    }
+    console.log('[Alert]', msg);
+  },
+
+  render() {
+    const listEl   = document.getElementById('alerts-list');
+    const emptyEl  = document.getElementById('no-alerts');
+    if (!listEl) return;
+    if (this.list.length === 0) {
+      listEl.innerHTML = '';
+      if (emptyEl) emptyEl.style.display = 'block';
+      return;
+    }
+    if (emptyEl) emptyEl.style.display = 'none';
+    listEl.innerHTML = this.list.map(a => `
+      <li class="alert-item ${a.triggered ? 'opacity:0.5' : ''}" ${a.triggered ? 'style="opacity:0.5"' : ''}>
+        <div>
+          <span class="alert-metal">${CONFIG.METAL_ICONS[a.metal]} ${CONFIG.METAL_NAMES[a.metal]}</span>
+          <span class="alert-cond">${a.direction}</span>
+          <span class="alert-price mono">$${fmt(a.price)}</span>
+          ${a.triggered ? '<span style="color:var(--green);font-size:10px;margin-left:6px;">✓ TRIGGERED</span>' : ''}
+        </div>
+        <span class="alert-del" onclick="Alerts.remove(${a.id})" title="Delete">✕</span>
+      </li>
+    `).join('');
+  }
+};
+
+// Check alerts on every price update
+document.addEventListener('pricesUpdated', e => {
+  Alerts.check(e.detail.prices);
+});
+
+// ── Hide setup guide if API key is set ─────────────────────
+function checkSetupGuide() {
+  if (CONFIG.GOLDAPI_KEY !== 'YOUR_GOLDAPI_KEY') {
+    const sg = document.getElementById('setup-guide');
+    if (sg) sg.style.display = 'none';
+  }
+}
+
+// ── Boot sequence ─────────────────────────────────────────
+(async function boot() {
+  checkSetupGuide();
+  updateMarketStatus();
+  Alerts.load();
+
+  // Load historical data first (needed for charts)
+  try {
+    await loadHistorical();
+  } catch (err) {
+    console.error('[Boot] Could not load historical.json:', err);
+  }
+
+  // Start live price fetching
+  PriceManager.start();
+
+  // Update market status every minute
+  setInterval(updateMarketStatus, 60000);
+
+  console.log('[PMT] Precious Metals Terminal — Ahmad Ghozlan — Loaded');
+})();
+</script>
+
+</body>
+</html>
