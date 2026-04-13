@@ -1,6 +1,6 @@
 // ─────────────────────────────────────────────
 //  PRICES.JS — Live price fetching & management
-//  Source chain: GoldAPI → Metals.dev → hardcoded
+//  Source chain: CurrencyAPI (XAU/XAG) → GoldAPI → Metals.dev → hardcoded
 // ─────────────────────────────────────────────
 
 const PriceManager = (() => {
@@ -9,12 +9,60 @@ const PriceManager = (() => {
   let lastUpdated    = null;
   let updateTimer    = null;
   let countdownTimer = null;
-  let secondsUntilUpdate = 60;
+  let secondsUntilUpdate = CONFIG.REFRESH_INTERVAL / 1000;
 
   // Metals.dev uses lowercase names, not symbols
   const METALSDEV_NAMES = { XAU: 'gold', XAG: 'silver', XPT: 'platinum' };
 
-  // ── SOURCE 1: GoldAPI.io ──────────────────────────────────
+  // ── SOURCE 1: fawazahmed0 currency-api (XAU + XAG only) ──
+  // Free, no key, CORS-enabled. Returns inverse rates: invert to get USD/oz.
+  // Cache is shared across all three metal fetches in one update cycle.
+  let _currencyApiPromise = null;
+
+  async function _loadCurrencyAPI() {
+    if (_currencyApiPromise) return _currencyApiPromise;
+    _currencyApiPromise = (async () => {
+      const urls = [CONFIG.CURRENCY_API_PRIMARY, CONFIG.CURRENCY_API_FALLBACK];
+      for (const url of urls) {
+        try {
+          const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
+          if (!res.ok) continue;
+          return await res.json();
+        } catch { /* try next */ }
+      }
+      throw new Error('CurrencyAPI: both endpoints failed');
+    })();
+    return _currencyApiPromise;
+  }
+
+  async function fetchCurrencyAPI(symbol) {
+    const key = symbol.toLowerCase();   // 'xau' or 'xag'
+    const data = await _loadCurrencyAPI();
+    const inverseRate = data?.usd?.[key];
+    if (!inverseRate) throw new Error(`CurrencyAPI: no rate for ${symbol}`);
+    const price = 1 / inverseRate;
+    const PRICE_FLOOR   = { XAU: 200, XAG: 2 };
+    const PRICE_CEILING = { XAU: 20000, XAG: 500 };
+    if (price < PRICE_FLOOR[symbol] || price > PRICE_CEILING[symbol]) {
+      throw new Error(`CurrencyAPI: ${symbol} price ${price.toFixed(2)} out of range`);
+    }
+    return {
+      symbol,
+      price,
+      prev_close: price,   // daily API — no intraday prev-close
+      open:       price,
+      high:       price,
+      low:        price,
+      change:     0,
+      change_pct: 0,
+      timestamp:  Date.now() / 1000,
+      ask:        price * 1.0003,
+      bid:        price * 0.9997,
+      source:     'CurrencyAPI'
+    };
+  }
+
+  // ── SOURCE 2: GoldAPI.io ──────────────────────────────────
   async function fetchGoldAPI(symbol) {
     const url = `${CONFIG.GOLDAPI_BASE}/${symbol}/USD`;
     const res = await fetch(url, {
@@ -104,7 +152,18 @@ const PriceManager = (() => {
 
   // ── Fetch one metal: try chain in order ───────────────────
   async function fetchMetal(symbol) {
-    // 1. GoldAPI
+    // 1. CurrencyAPI — free, no key, CORS-safe (XAU + XAG only)
+    if (symbol !== 'XPT') {
+      try {
+        const data = await fetchCurrencyAPI(symbol);
+        console.info(`[PriceManager] ${symbol} via CurrencyAPI — $${data.price.toFixed(2)}`);
+        return data;
+      } catch (e) {
+        console.warn(`[PriceManager] CurrencyAPI failed for ${symbol}: ${e.message}`);
+      }
+    }
+
+    // 2. GoldAPI (intraday; free tier = 100 req/month)
     try {
       const data = await fetchGoldAPI(symbol);
       console.info(`[PriceManager] ${symbol} via GoldAPI — $${data.price}`);
@@ -113,7 +172,7 @@ const PriceManager = (() => {
       console.warn(`[PriceManager] GoldAPI failed for ${symbol}: ${e.message}`);
     }
 
-    // 2. Metals.dev
+    // 3. Metals.dev
     try {
       const data = await fetchMetalsDev(symbol);
       console.info(`[PriceManager] ${symbol} via Metals.dev — $${data.price}`);
@@ -122,7 +181,7 @@ const PriceManager = (() => {
       console.warn(`[PriceManager] Metals.dev failed for ${symbol}: ${e.message}`);
     }
 
-    // 3. Hardcoded
+    // 4. Hardcoded
     console.warn(`[PriceManager] ${symbol} using hardcoded fallback`);
     return buildFallback(symbol);
   }
@@ -152,12 +211,15 @@ const PriceManager = (() => {
     if (sources.includes('Offline')) {
       el.textContent = '⚠ Offline data';
       el.style.color = '#f0a500';
-    } else if (sources.includes('Metals.dev') && !sources.includes('GoldAPI')) {
-      el.textContent = '● Metals.dev';
-      el.style.color = '#4da6ff';
     } else if (sources.includes('GoldAPI')) {
       el.textContent = '● GoldAPI Live';
       el.style.color = 'var(--green)';
+    } else if (sources.includes('Metals.dev')) {
+      el.textContent = '● Metals.dev';
+      el.style.color = '#4da6ff';
+    } else if (sources.includes('CurrencyAPI')) {
+      el.textContent = '● ECB Daily';
+      el.style.color = '#4da6ff';
     } else {
       el.textContent = '● Live';
       el.style.color = 'var(--green)';
@@ -170,6 +232,7 @@ const PriceManager = (() => {
 
   // ── Main update cycle ─────────────────────────────────────
   async function update() {
+    _currencyApiPromise = null;   // reset per-cycle cache
     const dot = document.getElementById('market-status-dot');
     try {
       dot?.classList.add('fetching');
