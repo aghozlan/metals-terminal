@@ -186,12 +186,20 @@ const PriceManager = (() => {
     return buildFallback(symbol);
   }
 
-  // ── EUR rate from Frankfurter ─────────────────────────────
+  // ── EUR rate ──────────────────────────────────────────────
+  // Primary: reuse the CurrencyAPI payload already fetched this cycle (usd.eur).
+  // Fallback: Frankfurter (blocks CORS on some networks — caught upstream).
   async function fetchEurRate() {
+    try {
+      const data = await _loadCurrencyAPI();
+      const rate = data?.usd?.eur;
+      if (rate && rate > 0.5 && rate < 1.5) return rate;
+    } catch { /* fall through to Frankfurter */ }
+
     const res  = await fetch(`${CONFIG.FRANKFURTER_BASE}/latest?from=USD&to=EUR`,
                               { signal: AbortSignal.timeout(6000) });
-    const data = await res.json();
-    return data.rates.EUR;
+    const d = await res.json();
+    return d.rates.EUR;
   }
 
   // ── Fetch all three metals (in parallel) ──────────────────
@@ -204,30 +212,34 @@ const PriceManager = (() => {
 
   // ── Update source badge in header ─────────────────────────
   function updateSourceBadge(prices) {
-    const sources = [...new Set(Object.values(prices).map(p => p.source))];
+    const vals         = Object.values(prices);
+    const sources      = [...new Set(vals.map(p => p.source))];
+    const offlineCount = vals.filter(p => p.source === 'Offline').length;
+    const allOffline   = offlineCount === vals.length;
     const el = document.getElementById('data-source-badge');
-    if (!el) return;
-
-    if (sources.includes('Offline')) {
-      el.textContent = '⚠ Offline data';
-      el.style.color = '#f0a500';
-    } else if (sources.includes('GoldAPI')) {
-      el.textContent = '● GoldAPI Live';
-      el.style.color = 'var(--green)';
-    } else if (sources.includes('Metals.dev')) {
-      el.textContent = '● Metals.dev';
-      el.style.color = '#4da6ff';
-    } else if (sources.includes('CurrencyAPI')) {
-      el.textContent = '● ECB Daily';
-      el.style.color = '#4da6ff';
-    } else {
-      el.textContent = '● Live';
-      el.style.color = 'var(--green)';
+    if (el) {
+      if (allOffline) {
+        el.textContent = '⚠ Offline data';
+        el.style.color = '#f0a500';
+      } else if (sources.includes('GoldAPI')) {
+        el.textContent = offlineCount ? '● GoldAPI (partial)' : '● GoldAPI Live';
+        el.style.color = 'var(--green)';
+      } else if (sources.includes('Metals.dev')) {
+        el.textContent = offlineCount ? '● Metals.dev (partial)' : '● Metals.dev';
+        el.style.color = '#4da6ff';
+      } else if (sources.includes('CurrencyAPI')) {
+        // XPT may be on fallback — note it in the badge
+        el.textContent = offlineCount ? '● ECB Daily (XPT est.)' : '● ECB Daily';
+        el.style.color = '#4da6ff';
+      } else {
+        el.textContent = '● Live';
+        el.style.color = 'var(--green)';
+      }
     }
 
-    // Also update fallback banner
+    // Banner: only show when every metal is on hardcoded fallback
     const banner = document.getElementById('api-fallback-banner');
-    if (banner) banner.classList.toggle('show', sources.includes('Offline'));
+    if (banner) banner.classList.toggle('show', allOffline);
   }
 
   // ── Main update cycle ─────────────────────────────────────
