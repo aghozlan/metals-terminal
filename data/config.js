@@ -39,10 +39,10 @@ const CONFIG = {
     XPT: '🥉'
   },
 
-  // Fallback prices (used when API is unavailable)
+  // Fallback prices (used when API is unavailable) — updated 2026-04-13
   FALLBACK_PRICES: {
-    XAU: { price: 6773.00, prev_close: 6678.00, open: 6678.00, high: 6825.00, low: 6645.00 },
-    XAG: { price: 295.25,  prev_close: 282.65,  open: 282.65,  high: 296.85,  low: 282.35 },
-    XPT: { price: 10958.00, prev_close: 10585.00, open: 10585.00, high: 10985.00, low: 10562.00 }
+    XAU: { price: 4749.00, prev_close: 4712.00, open: 4712.00, high: 4782.00, low: 4698.00 },
+    XAG: { price: 75.40,   prev_close: 74.85,   open: 74.85,   high: 75.90,   low: 74.60  },
+    XPT: { price: 2027.00, prev_close: 2009.00, open: 2009.00, high: 2045.00, low: 2001.00 }
   }
 };

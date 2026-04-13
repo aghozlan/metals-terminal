@@ -24,18 +24,32 @@ const PriceManager = (() => {
     if (!res.ok) throw new Error(`GoldAPI HTTP ${res.status}`);
     const d = await res.json();
     if (!d.price) throw new Error('GoldAPI: no price field');
+
+    // GoldAPI can return the inverse rate (oz per USD) in certain configurations.
+    // If price is below a realistic floor we invert; above a ceiling we also reject.
+    const PRICE_FLOOR   = { XAU: 200,   XAG: 2,    XPT: 200   };
+    const PRICE_CEILING = { XAU: 20000, XAG: 500,  XPT: 10000 };
+    let price = d.price;
+    if (price > 0 && price < PRICE_FLOOR[symbol]) {
+      console.warn(`[PriceManager] GoldAPI ${symbol}: price ${price} looks inverted — using 1/price`);
+      price = 1 / price;
+    }
+    if (price < PRICE_FLOOR[symbol] || price > PRICE_CEILING[symbol]) {
+      throw new Error(`GoldAPI: ${symbol} price ${price} out of expected range`);
+    }
+
     return {
       symbol,
-      price:      d.price,
-      prev_close: d.prev_close_price || d.price,
-      open:       d.open_price       || d.price,
-      high:       d.high_price       || d.price,
-      low:        d.low_price        || d.price,
+      price,
+      prev_close: d.prev_close_price || price,
+      open:       d.open_price       || price,
+      high:       d.high_price       || price,
+      low:        d.low_price        || price,
       change:     d.ch               || 0,
       change_pct: d.chp              || 0,
       timestamp:  d.timestamp        || Date.now() / 1000,
-      ask:        d.ask              || d.price * 1.0003,
-      bid:        d.bid              || d.price * 0.9997,
+      ask:        d.ask              || price * 1.0003,
+      bid:        d.bid              || price * 0.9997,
       source:     'GoldAPI'
     };
   }
